@@ -1,0 +1,22 @@
+# STM32CubeIDE
+Debug/
+Release/
+*.launch
+.metadata/
+.settings/
+*.o
+*.d
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
