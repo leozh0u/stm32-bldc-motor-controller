@@ -20,3 +20,15 @@ __pycache__/
 *.pyc
 venv/
 .venv/
+
+# CubeIDE workspace metadata (project-specific)
+firmware/.metadata/
+firmware/Debug/
+firmware/Release/
+firmware/**/*.o
+firmware/**/*.d
+firmware/**/*.elf
+firmware/**/*.bin
+firmware/**/*.hex
+firmware/**/*.map
+firmware/**/*.list
