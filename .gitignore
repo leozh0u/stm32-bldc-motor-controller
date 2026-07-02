@@ -32,3 +32,4 @@ firmware/**/*.bin
 firmware/**/*.hex
 firmware/**/*.map
 firmware/**/*.list
+__pycache__/
