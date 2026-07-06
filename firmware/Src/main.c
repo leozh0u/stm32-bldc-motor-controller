@@ -1,69 +1,90 @@
 /**
- * main.c — TIM1 PWM on PA8 (TIM1_CH1), direction pins PA9/PA10
- * Drives TB6612FNG motor A. STBY must be tied HIGH externally or via GPIO.
+ * main.c — motor control + telemetry main loop.
+ *
+ * CONTROL_MODE selects behavior:
+ *   MODE_OPEN_LOOP  (default) — steps through fixed duty levels while
+ *     streaming telemetry. This is the bring-up mode: it validates encoder
+ *     counting and UART framing on hardware before any PID output is trusted.
+ *     pwm_duty and rpm in the telemetry are real; setpoint_rpm echoes 0.
+ *   MODE_CLOSED_LOOP — PID on encoder RPM. Requires ENCODER_CPR (encoder.h)
+ *     to have been measured on hardware first, and gains tuned.
+ *
+ * Timing: 1ms SysTick. Control update every 10ms (100Hz), telemetry frame
+ * every 50ms (20Hz, ~24% of the 115200-baud wire at 14 bytes/frame).
+ *
+ * TB6612FNG STBY must be tied HIGH externally.
  */
-
 #include "stm32f401xe.h"
+#include "systick.h"
+#include "motor.h"
+#include "encoder.h"
+#include "uart.h"
+#include "telemetry.h"
+#include "pid.h"
 
-#define PWM_FREQ_HZ   20000   // 20kHz, above audible range
-#define TIM1_CLK_HZ   16000000
+#define MODE_OPEN_LOOP   0
+#define MODE_CLOSED_LOOP 1
 
-static void gpio_init(void)
-{
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+#ifndef CONTROL_MODE
+#define CONTROL_MODE MODE_OPEN_LOOP
+#endif
 
-    GPIOA->MODER &= ~(0x3 << (8 * 2));
-    GPIOA->MODER |=  (0x2 << (8 * 2));
-    GPIOA->AFR[1] &= ~(0xF << ((8 - 8) * 4));
-    GPIOA->AFR[1] |=  (0x1 << ((8 - 8) * 4));
+#define CONTROL_PERIOD_MS   10u
+#define TELEM_PERIOD_MS     50u
 
-    GPIOA->MODER &= ~(0x3 << (9 * 2));
-    GPIOA->MODER |=  (0x1 << (9 * 2));
-    GPIOA->MODER &= ~(0x3 << (10 * 2));
-    GPIOA->MODER |=  (0x1 << (10 * 2));
-}
-
-static void tim1_pwm_init(void)
-{
-    RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
-
-    uint16_t period = (TIM1_CLK_HZ / PWM_FREQ_HZ) - 1;
-
-    TIM1->PSC = 0;
-    TIM1->ARR = period;
-
-    TIM1->CCMR1 &= ~TIM_CCMR1_OC1M;
-    TIM1->CCMR1 |= (0x6 << 4);
-    TIM1->CCMR1 |= TIM_CCMR1_OC1PE;
-
-    TIM1->CCER |= TIM_CCER_CC1E;
-
-    TIM1->BDTR |= TIM_BDTR_MOE;
-
-    TIM1->CR1 |= TIM_CR1_ARPE;
-    TIM1->CR1 |= TIM_CR1_CEN;
-
-    TIM1->CCR1 = 0;
-}
-
-static void motor_set_duty(uint16_t duty_percent)
-{
-    uint32_t ccr = ((uint32_t)(TIM1->ARR + 1) * duty_percent) / 100;
-    TIM1->CCR1 = ccr;
-}
-
-static void motor_forward(void)
-{
-    GPIOA->ODR |= (1 << 9);
-    GPIOA->ODR &= ~(1 << 10);
-}
+#if CONTROL_MODE == MODE_CLOSED_LOOP
+/* Starting-point gains only — tune on hardware. Output is duty percent. */
+#define PID_KP  0.30f
+#define PID_KI  1.50f
+#define PID_KD  0.00f
+static pid_ctrl_t pid;
+static int16_t setpoint_rpm = 150;
+#else
+/* Open-loop bring-up profile: duty steps, 5s each, then repeat. */
+static const int16_t duty_profile[] = { 30, 50, 70, 50, -50, 0 };
+#define DUTY_STEP_MS 5000u
+#endif
 
 int main(void)
 {
-    gpio_init();
-    tim1_pwm_init();
-    motor_forward();
-    motor_set_duty(50);
+    systick_init();
+    motor_init();
+    encoder_init();
+    uart_init();
 
-    for (;;);
+#if CONTROL_MODE == MODE_CLOSED_LOOP
+    pid_init(&pid, PID_KP, PID_KI, PID_KD,
+             (float)CONTROL_PERIOD_MS / 1000.0f, -100.0f, 100.0f);
+#endif
+
+    uint32_t next_control = millis();
+    uint32_t next_telem = millis();
+    int16_t rpm = 0;
+    int16_t duty = 0;
+
+    for (;;) {
+        uint32_t now = millis();
+
+        if ((int32_t)(now - next_control) >= 0) {
+            next_control += CONTROL_PERIOD_MS;
+            rpm = encoder_rpm(CONTROL_PERIOD_MS);
+
+#if CONTROL_MODE == MODE_CLOSED_LOOP
+            duty = (int16_t)pid_update(&pid, (float)setpoint_rpm, (float)rpm);
+#else
+            duty = duty_profile[(now / DUTY_STEP_MS) %
+                                (sizeof(duty_profile) / sizeof(duty_profile[0]))];
+#endif
+            motor_set(duty);
+        }
+
+        if ((int32_t)(now - next_telem) >= 0) {
+            next_telem += TELEM_PERIOD_MS;
+#if CONTROL_MODE == MODE_CLOSED_LOOP
+            telemetry_send(now, rpm, duty, setpoint_rpm);
+#else
+            telemetry_send(now, rpm, duty, 0);
+#endif
+        }
+    }
 }

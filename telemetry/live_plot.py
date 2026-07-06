@@ -1,10 +1,12 @@
 """
 Live serial telemetry reader + plotter.
 Reads framed bytes from USART2 (via ST-LINK VCP), parses, plots RPM vs setpoint.
+
+--mock replaces the serial port with synthetic frames from mock_stream, so the
+full parse -> log -> plot pipeline runs with no hardware attached.
 """
 import sys
 import argparse
-import serial
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from collections import deque
@@ -15,6 +17,19 @@ from csv_logger import CSVLogger
 BAUD = 115200
 MAX_POINTS = 300
 
+class MockSerial:
+    """Duck-types serial.Serial.read()/close() over mock_stream chunks."""
+    def __init__(self, n_frames=500, corrupt_every=25):
+        from mock_stream import generate_mock_stream
+        self._chunks = iter(generate_mock_stream(n_frames=n_frames,
+                                                 corrupt_every=corrupt_every))
+
+    def read(self, _size):
+        return next(self._chunks, b'')
+
+    def close(self):
+        pass
+
 def find_port():
     import serial.tools.list_ports
     ports = list(serial.tools.list_ports.comports())
@@ -23,19 +38,27 @@ def find_port():
             return p.device
     return None
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('--port', default=None, help='Serial port (auto-detects usbmodem if omitted)')
-    ap.add_argument('--csv', default='telemetry_log.csv', help='CSV output path')
-    args = ap.parse_args()
-
+def open_source(args):
+    """Returns a serial.Serial or MockSerial per CLI args."""
+    if args.mock:
+        print("Mock mode: synthetic telemetry, no hardware")
+        return MockSerial()
+    import serial
     port = args.port or find_port()
     if port is None:
         print("No usbmodem serial port found. Pass --port explicitly.")
         sys.exit(1)
-
     print(f"Connecting to {port} @ {BAUD} baud")
-    ser = serial.Serial(port, BAUD, timeout=0.1)
+    return serial.Serial(port, BAUD, timeout=0.1)
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--port', default=None, help='Serial port (auto-detects usbmodem if omitted)')
+    ap.add_argument('--csv', default='telemetry_log.csv', help='CSV output path')
+    ap.add_argument('--mock', action='store_true', help='Use synthetic mock_stream data instead of serial')
+    args = ap.parse_args()
+
+    ser = open_source(args)
     parser = FrameParser()
     logger = CSVLogger(args.csv)
 
