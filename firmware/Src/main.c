@@ -8,6 +8,10 @@
  *     pwm_duty and rpm in the telemetry are real; setpoint_rpm echoes 0.
  *   MODE_CLOSED_LOOP — PID on encoder RPM. Requires ENCODER_CPR (encoder.h)
  *     to have been measured on hardware first, and gains tuned.
+ *   MODE_CALIBRATE_CPR — motor off; prints the raw encoder count over UART
+ *     as text every 250ms ("count=1320\r\n", view with screen/minicom at
+ *     115200). To measure ENCODER_CPR: reset the board, mark the output
+ *     shaft, rotate exactly one turn by hand, read the printed count.
  *
  * Timing: 1ms SysTick. Control update every 10ms (100Hz), telemetry frame
  * every 50ms (20Hz, ~24% of the 115200-baud wire at 14 bytes/frame).
@@ -22,8 +26,9 @@
 #include "telemetry.h"
 #include "pid.h"
 
-#define MODE_OPEN_LOOP   0
-#define MODE_CLOSED_LOOP 1
+#define MODE_OPEN_LOOP     0
+#define MODE_CLOSED_LOOP   1
+#define MODE_CALIBRATE_CPR 2
 
 #ifndef CONTROL_MODE
 #define CONTROL_MODE MODE_OPEN_LOOP
@@ -39,7 +44,7 @@
 #define PID_KD  0.00f
 static pid_ctrl_t pid;
 static int16_t setpoint_rpm = 150;
-#else
+#elif CONTROL_MODE == MODE_OPEN_LOOP
 /* Open-loop bring-up profile: duty steps, 5s each, then repeat. */
 static const int16_t duty_profile[] = { 30, 50, 70, 50, -50, 0 };
 #define DUTY_STEP_MS 5000u
@@ -51,6 +56,18 @@ int main(void)
     motor_init();
     encoder_init();
     uart_init();
+
+#if CONTROL_MODE == MODE_CALIBRATE_CPR
+    /* Motor stays at duty 0 (motor_init leaves CCR1=0, direction coast).
+     * TIM2->CNT starts at 0, so the printed count IS the accumulated
+     * counts since reset — one hand-turn of the output shaft = CPR. */
+    for (;;) {
+        uart_write_str("count=");
+        uart_write_i32((int32_t)encoder_count());
+        uart_write_str("\r\n");
+        delay_ms(250);
+    }
+#else
 
 #if CONTROL_MODE == MODE_CLOSED_LOOP
     pid_init(&pid, PID_KP, PID_KI, PID_KD,
@@ -87,4 +104,5 @@ int main(void)
 #endif
         }
     }
+#endif /* CONTROL_MODE != MODE_CALIBRATE_CPR */
 }

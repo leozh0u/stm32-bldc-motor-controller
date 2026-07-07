@@ -12,7 +12,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from collections import deque
 
-from live_plot import MockSerial, MAX_POINTS
+from live_plot import MAX_POINTS
+from serial_source import MockSerial
 from protocol import FrameParser
 from csv_logger import CSVLogger
 

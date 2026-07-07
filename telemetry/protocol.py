@@ -35,6 +35,10 @@ class FrameParser:
     Incremental state-machine parser. Feed it raw bytes as they arrive
     from serial (which may split frames across reads); it emits parsed
     dicts and silently resyncs past corrupted frames.
+
+    Counters (for link health checks):
+      frames_ok — frames parsed successfully
+      errors    — resyncs caused by bad length, checksum, or end byte
     """
     WAIT_START, WAIT_LEN, WAIT_PAYLOAD, WAIT_CHECKSUM, WAIT_END = range(5)
 
@@ -43,6 +47,8 @@ class FrameParser:
         self.payload = bytearray()
         self.expected_len = 0
         self.checksum_byte = 0
+        self.frames_ok = 0
+        self.errors = 0
 
     def feed(self, data: bytes):
         """Yield parsed telemetry dicts found in `data`."""
@@ -65,6 +71,7 @@ class FrameParser:
         elif self.state == self.WAIT_LEN:
             self.expected_len = b
             if self.expected_len != PAYLOAD_LEN:
+                self.errors += 1
                 self._reset()  # malformed length, resync
             else:
                 self.state = self.WAIT_PAYLOAD
@@ -81,9 +88,11 @@ class FrameParser:
         elif self.state == self.WAIT_END:
             if b == END and self.checksum_byte == checksum(bytes(self.payload)):
                 frame = unpack_payload(bytes(self.payload))
+                self.frames_ok += 1
                 self._reset()
                 return frame
             else:
+                self.errors += 1
                 self._reset()  # bad end byte or checksum mismatch, resync
 
         return None

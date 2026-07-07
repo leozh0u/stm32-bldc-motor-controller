@@ -11,4 +11,8 @@
 void uart_init(void);
 void uart_write(const uint8_t *data, size_t len);   /* blocking */
 
+/* Text helpers for human-readable output (CPR calibration mode). */
+void uart_write_str(const char *s);
+void uart_write_i32(int32_t v);                     /* signed decimal */
+
 #endif

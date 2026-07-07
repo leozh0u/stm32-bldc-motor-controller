@@ -33,3 +33,30 @@ void uart_write(const uint8_t *data, size_t len)
     }
     while (!(USART2->SR & USART_SR_TC)) { }        /* drain last byte */
 }
+
+void uart_write_str(const char *s)
+{
+    size_t len = 0;
+    while (s[len] != '\0') {
+        len++;
+    }
+    uart_write((const uint8_t *)s, len);
+}
+
+void uart_write_i32(int32_t v)
+{
+    char buf[12];                                  /* -2147483648 + NUL */
+    char *p = &buf[11];
+    /* 0u - (uint32_t)v negates without the signed-overflow UB of -INT32_MIN */
+    uint32_t u = (v < 0) ? (0u - (uint32_t)v) : (uint32_t)v;
+
+    *p = '\0';
+    do {
+        *--p = (char)('0' + (u % 10u));
+        u /= 10u;
+    } while (u != 0u);
+    if (v < 0) {
+        *--p = '-';
+    }
+    uart_write_str(p);
+}
