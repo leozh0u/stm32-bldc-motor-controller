@@ -14,7 +14,7 @@
  *     shaft, rotate exactly one turn by hand, read the printed count.
  *
  * Timing: 1ms SysTick. Control update every 10ms (100Hz), telemetry frame
- * every 50ms (20Hz, ~24% of the 115200-baud wire at 14 bytes/frame).
+ * every 50ms (20Hz, ~2.4% of the 115200-baud wire at 14 bytes/frame).
  *
  * TB6612FNG STBY must be tied HIGH externally.
  */
@@ -49,6 +49,18 @@ static int16_t setpoint_rpm = 150;
 static const int16_t duty_profile[] = { 30, 50, 70, 50, -50, 0 };
 #define DUTY_STEP_MS 5000u
 #endif
+
+/* Called by Reset_Handler before .data/.bss are initialized — must not
+ * touch static storage. The startup declares SystemInit weak with no
+ * definition, so without this the call links to a NOP and the FPU stays
+ * disabled: under -mfloat-abi=hard the first float instruction (PID) then
+ * takes a UsageFault (NOCP). */
+void SystemInit(void)
+{
+    SCB->CPACR |= (0xFu << 20);        /* CP10/CP11 full access (FPU) */
+    __DSB();
+    __ISB();
+}
 
 int main(void)
 {

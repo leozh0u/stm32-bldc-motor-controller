@@ -85,7 +85,7 @@ IDE runs. For an IDE-free sanity check, compile with CubeIDE's bundled
 
 ## Telemetry protocol
 
-14-byte little-endian frame, 20Hz (~24% of the 115200-baud wire):
+14-byte little-endian frame, 20Hz (~2.4% of the 115200-baud wire):
 
 ```
 [0]     START 0xAA
@@ -156,6 +156,12 @@ bus.
 
 - **TIM1/TIM8 dead output:** advanced-control timers output nothing on their
   pins unless `BDTR.MOE` is set, even with every other register correct.
+- **FPU off at reset:** ST's startup calls `SystemInit` but declares it
+  weak; with no definition the linker silently turns the call into a NOP,
+  the FPU never gets enabled (`SCB->CPACR`), and the first float instruction
+  under `-mfloat-abi=hard` takes a UsageFault. `main.c` defines `SystemInit`
+  to enable CP10/CP11 (it runs before `.data`/`.bss` init, so it must not
+  touch static storage).
 - **USART2 baud:** APB1 = 16MHz HSI, OVER8=0: USARTDIV = 16e6/(16·115200) =
   8.68 → mantissa 8, fraction 11 → `BRR = 0x08B` (actual 115108 baud,
   −0.08% error).
