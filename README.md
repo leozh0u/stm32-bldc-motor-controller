@@ -21,6 +21,23 @@ UART telemetry, and PID awaiting hardware bring-up (see
 - Flash/debug via onboard ST-LINK (USB Mini-B); UART telemetry rides the
   ST-LINK virtual COM port — no extra cabling
 
+### Bill of materials
+
+| Part | Detail |
+|------|--------|
+| MCU board | Nucleo-F401RE (STM32F401RE) |
+| Motor | JGB37-520, 12V, **gear ratio 56** (178 rpm no-load), AB Hall quadrature encoder on rear cover, 6-pin PH2.0 interface |
+| Motor driver | TB6612FNG dual H-bridge module (headers pre-soldered) |
+| Motor supply | 12V / 2A DC adapter → DC5.5×2.1 barrel-to-screw-terminal adapter → breadboard rail (motor stall ≈ 2.4A; fine for brief starts, avoid sustained stall) |
+| Prototyping | MB-102 830-point breadboard; male-male / male-female / female-female jumpers |
+| Instrumentation | 8-channel 24MHz USB logic analyzer; multimeter |
+| Cabling | USB Mini-B (ST-LINK); 6-pin PH2.0 motor/encoder lead |
+
+The encoder's 6-pin PH2.0 connector carries **both** motor power (Motor+/−) and
+the encoder signals: pin 1 Motor+, 2 Vcc, 3 Ch A, 4 Ch B, 5 GND, 6 Motor−.
+Power the encoder Vcc from **3.3V** (not 5V) so the A/B outputs — pulled up to
+Vcc on-board — swing at the MCU's logic level.
+
 ### Pin map
 
 | Function | Pin | Notes |
@@ -133,11 +150,13 @@ synthetic (optionally corrupted) frames. Set up the venv with
   real linker script; never run on the board
 - Host tooling verified end-to-end against mock streams (headless
   integration tests), not yet against a live board
-- `ENCODER_CPR` in `encoder.h` is an unmeasured placeholder — RPM values are
-  meaningless until it's measured (see checklist)
+- `ENCODER_CPR` in `encoder.h` is computed from the motor's gear ratio
+  (11 PPR × 4 × 56 = 2464) but not yet confirmed on hardware — RPM values are
+  provisional until the calibrate-mode check reconciles against it (see checklist)
 
-**Planned:** closed-loop PID tuning on hardware, then FreeRTOS port and CAN
-bus.
+**Planned:** closed-loop PID tuning on hardware, then a FreeRTOS port. (CAN
+bus was descoped — the F401 has no bxCAN peripheral, and adding an external
+MCP2515/SPI bridge wasn't worth the scope for this build.)
 
 ### Hardware bring-up checklist
 
@@ -149,7 +168,8 @@ bus.
    directions
 5. Rebuild with `CONTROL_MODE = MODE_CALIBRATE_CPR`, flash, open the VCP in a
    terminal, mark the output shaft, rotate exactly one turn by hand, read the
-   printed count → set `ENCODER_CPR` in `encoder.h`
+   printed count → reconcile against the computed `ENCODER_CPR` (2464) in
+   `encoder.h` and correct it if the measurement disagrees
 6. Rebuild with `MODE_CLOSED_LOOP`, tune PID gains
 
 ## Register-level notes and gotchas
@@ -174,8 +194,9 @@ bus.
   STMicroelectronics/cmsis-device-f4 and ARM-software/CMSIS_5) into
   `firmware/Drivers/CMSIS/` and include paths added manually.
 - **Overflow margins:** RPM math is `delta·60000 / (CPR·period_ms)` in
-  int32 — worst-case delta at 10ms is ~110 counts, nowhere near overflow;
-  results are clamped to int16 for the wire.
+  int32 — at the motor's 178 rpm ceiling and CPR 2464, worst-case delta over
+  10ms is ~73 counts and the `delta·60000` numerator is ~4.4M, nowhere near
+  the int32 limit; results are clamped to int16 for the wire.
 
 ## References
 

@@ -9,7 +9,7 @@
  *   MODE_CLOSED_LOOP — PID on encoder RPM. Requires ENCODER_CPR (encoder.h)
  *     to have been measured on hardware first, and gains tuned.
  *   MODE_CALIBRATE_CPR — motor off; prints the raw encoder count over UART
- *     as text every 250ms ("count=1320\r\n", view with screen/minicom at
+ *     as text every 250ms ("count=2464\r\n", view with screen/minicom at
  *     115200). To measure ENCODER_CPR: reset the board, mark the output
  *     shaft, rotate exactly one turn by hand, read the printed count.
  *
