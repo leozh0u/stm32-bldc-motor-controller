@@ -4,7 +4,7 @@ Bare-metal firmware for an STM32F401RE (Nucleo-64) driving a brushed DC gear
 motor with quadrature-encoder speed feedback, PID control, and live binary
 telemetry to a Python plotting stack on the host.
 
-No ST HAL or LL drivers — all peripheral access is direct register
+No ST HAL or LL drivers: all peripheral access is direct register
 manipulation written against the reference manuals (RM0368, PM0214, UM1724).
 CMSIS core and device headers (register definitions, NVIC/SysTick intrinsics)
 are the only abstraction layer used.
@@ -19,7 +19,7 @@ UART telemetry, and PID awaiting hardware bring-up (see
 - JGB37-520 12V brushed DC gear motor with quadrature encoder
 - TB6612FNG dual H-bridge driver
 - Flash/debug via onboard ST-LINK (USB Mini-B); UART telemetry rides the
-  ST-LINK virtual COM port — no extra cabling
+  ST-LINK virtual COM port, so no extra cabling
 
 ### Bill of materials
 
@@ -35,8 +35,8 @@ UART telemetry, and PID awaiting hardware bring-up (see
 
 The encoder's 6-pin PH2.0 connector carries **both** motor power (Motor+/−) and
 the encoder signals: pin 1 Motor+, 2 Vcc, 3 Ch A, 4 Ch B, 5 GND, 6 Motor−.
-Power the encoder Vcc from **3.3V** (not 5V) so the A/B outputs — pulled up to
-Vcc on-board — swing at the MCU's logic level.
+Power the encoder Vcc from **3.3V** (not 5V) so the A/B outputs, which are pulled up to
+Vcc on-board, swing at the MCU's logic level.
 
 ### Pin map
 
@@ -94,7 +94,7 @@ settings): `../Drivers/CMSIS/Core/Include` and
 `../Drivers/CMSIS/Device/ST/STM32F4xx/Include`.
 
 Headless build: `cd firmware/Debug && make -j` works only after an IDE build
-has regenerated the makefiles — they are generated artifacts that hardcode
+has regenerated the makefiles, since they are generated artifacts that hardcode
 the linker-script path and don't learn about new `Src/*.c` files until the
 IDE runs. For an IDE-free sanity check, compile with CubeIDE's bundled
 `arm-none-eabi-gcc` using the flags from `firmware/Debug/Src/subdir.mk`
@@ -141,27 +141,27 @@ synthetic (optionally corrupted) frames. Set up the venv with
 
 **Verified on hardware:**
 - GPIO blink (PA5), SysTick 1ms timebase
-- TIM1 20kHz PWM on PA8 + direction control — confirmed on a logic analyzer,
+- TIM1 20kHz PWM on PA8 + direction control, confirmed on a logic analyzer,
   motor spinning both directions
 
 **Written and compile-verified, awaiting hardware bring-up:**
-- Encoder decode, UART telemetry, PID, and the mode-switchable main loop —
+- Encoder decode, UART telemetry, PID, and the mode-switchable main loop:
   compiles `-Wall -Wextra` clean in all three modes and links against the
   real linker script; never run on the board
 - Host tooling verified end-to-end against mock streams (headless
   integration tests), not yet against a live board
 - `ENCODER_CPR` in `encoder.h` is computed from the motor's gear ratio
-  (11 PPR × 4 × 56 = 2464) but not yet confirmed on hardware — RPM values are
+  (11 PPR × 4 × 56 = 2464) but not yet confirmed on hardware; RPM values are
   provisional until the calibrate-mode check reconciles against it (see checklist)
 
 **Planned:** closed-loop PID tuning on hardware, then a FreeRTOS port. (CAN
-bus was descoped — the F401 has no bxCAN peripheral, and adding an external
+bus was descoped: the F401 has no bxCAN peripheral, and adding an external
 MCP2515/SPI bridge wasn't worth the scope for this build.)
 
 ### Hardware bring-up checklist
 
 1. Wire encoder A/B → PA0/PA1, encoder VCC/GND; TB6612FNG STBY high
-2. Build in CubeIDE (regenerates the stale makefiles) and flash — default
+2. Build in CubeIDE (regenerates the stale makefiles) and flash; default
    mode is open-loop duty steps
 3. `check_serial.py` — confirm valid frames, near-zero error count
 4. `live_plot.py` — duty steps visible, RPM nonzero and sign-correct in both
@@ -194,7 +194,7 @@ MCP2515/SPI bridge wasn't worth the scope for this build.)
   STMicroelectronics/cmsis-device-f4 and ARM-software/CMSIS_5) into
   `firmware/Drivers/CMSIS/` and include paths added manually.
 - **Overflow margins:** RPM math is `delta·60000 / (CPR·period_ms)` in
-  int32 — at the motor's 178 rpm ceiling and CPR 2464, worst-case delta over
+  int32. At the motor's 178 rpm ceiling and CPR 2464, worst-case delta over
   10ms is ~73 counts and the `delta·60000` numerator is ~4.4M, nowhere near
   the int32 limit; results are clamped to int16 for the wire.
 
